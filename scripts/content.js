@@ -217,6 +217,21 @@ function fillForm(data) {
             continue;
         }
 
+        // 电话字段去掉区号，只填写号码部分
+        if (fieldName === 'phone') {
+            const element = findField(fieldName);
+            if (element) {
+                // 去掉区号 (+xx 开头的部分)，只保留数字
+                const phoneNumber = value.replace(/^\+\d+\s*/, '').replace(/-/g, '');
+                simulateInput(element, phoneNumber);
+                filledCount++;
+                results[fieldName] = 'filled';
+            } else {
+                results[fieldName] = 'not found';
+            }
+            continue;
+        }
+
         const element = findField(fieldName);
 
         if (element) {
