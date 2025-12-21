@@ -13,6 +13,7 @@
     <header class="header">
       <h1>🌍 GeoFill</h1>
       <div class="header-actions">
+        <button class="settings-btn" id="openSettings" title="设置">⚙️</button>
         <button class="theme-toggle" id="themeToggle" title="切换主题">🌙</button>
       </div>
       <div class="ip-info-wrapper">
@@ -191,9 +192,73 @@
     </section>
 
     <footer class="actions">
+      <button class="btn btn-icon" id="copyAll" title="复制全部">📋</button>
       <button class="btn btn-secondary" id="regenerateAll">🔄 重新生成</button>
       <button class="btn btn-primary" id="fillForm">✍️ 填写表单</button>
     </footer>
+  </div>
+
+  <!-- 设置模态框 -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>⚙️ 设置</h2>
+        <button class="modal-close" id="closeSettings">×</button>
+      </div>
+      <div class="modal-body">
+        <!-- 密码设置 -->
+        <div class="settings-section">
+          <h3>🔐 密码生成</h3>
+          <div class="setting-row">
+            <label for="passwordLength">长度</label>
+            <input type="number" id="passwordLength" min="8" max="32" value="12">
+          </div>
+          <div class="setting-row">
+            <label>复杂度</label>
+            <div class="checkbox-group">
+              <label><input type="checkbox" id="pwdUppercase" checked> 大写</label>
+              <label><input type="checkbox" id="pwdLowercase" checked> 小写</label>
+              <label><input type="checkbox" id="pwdNumbers" checked> 数字</label>
+              <label><input type="checkbox" id="pwdSymbols" checked> 符号</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- 年龄设置 -->
+        <div class="settings-section">
+          <h3>🎂 生日年龄范围</h3>
+          <div class="setting-row">
+            <label for="minAge">最小年龄</label>
+            <input type="number" id="minAge" min="1" max="100" value="18">
+          </div>
+          <div class="setting-row">
+            <label for="maxAge">最大年龄</label>
+            <input type="number" id="maxAge" min="1" max="100" value="55">
+          </div>
+        </div>
+
+        <!-- 隐私设置 -->
+        <div class="settings-section">
+          <h3>🔒 隐私</h3>
+          <div class="setting-row">
+            <label for="autoClearData">关闭浏览器后清除数据</label>
+            <input type="checkbox" id="autoClearData">
+          </div>
+        </div>
+
+        <!-- 存档管理 -->
+        <div class="settings-section">
+          <h3>💾 配置存档</h3>
+          <div class="archive-controls">
+            <input type="text" id="archiveName" placeholder="存档名称">
+            <button class="btn btn-small" id="saveArchive">保存</button>
+          </div>
+          <div class="archive-list" id="archiveList">
+            <!-- 动态生成存档列表 -->
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>

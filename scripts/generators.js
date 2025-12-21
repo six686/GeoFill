@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 信息生成器 - 根据IP地理位置生成随机注册信息
  */
 
@@ -948,25 +948,72 @@ function regenerateField(fieldName, currentData, ipData) {
 
 // 导出函数供 popup.js 使用
 if (typeof window !== 'undefined') {
+  // 扩展密码生成函数（支持自定义设置）
+  function generatePasswordWithSettings(settings) {
+    settings = settings || {};
+    var length = settings.passwordLength || 12;
+    var useUppercase = settings.pwdUppercase !== false;
+    var useLowercase = settings.pwdLowercase !== false;
+    var useNumbers = settings.pwdNumbers !== false;
+    var useSymbols = settings.pwdSymbols !== false;
+    var chars = '';
+    var password = '';
+    if (useUppercase) { chars += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]; }
+    if (useLowercase) { chars += 'abcdefghijklmnopqrstuvwxyz'; password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]; }
+    if (useNumbers) { chars += '0123456789'; password += '0123456789'[Math.floor(Math.random() * 10)]; }
+    if (useSymbols) { chars += '!@#$%^&*'; password += '!@#$%^&*'[Math.floor(Math.random() * 8)]; }
+    if (!chars) { chars = 'abcdefghijklmnopqrstuvwxyz'; password = 'a'; }
+    for (var i = password.length; i < length; i++) { password += chars[Math.floor(Math.random() * chars.length)]; }
+    return password.split('').sort(function() { return Math.random() - 0.5; }).join('');
+  }
+
+  // 扩展信息生成函数（支持自定义设置）
+  function generateAllInfoWithSettings(ipData, settings) {
+    settings = settings || {};
+    var country = ipData.country || 'United States';
+    var ipCity = ipData.city || '';
+    var ipRegion = ipData.region || '';
+    var gender = generateGender();
+    var firstName = generateFirstName(country);
+    var lastName = generateLastName(country);
+    var username = generateUsername(firstName, lastName);
+    selectLocationByCity(country, ipCity, ipRegion);
+    return {
+      firstName: firstName, lastName: lastName, gender: gender,
+      birthday: generateBirthday(settings.minAge || 18, settings.maxAge || 55),
+      username: username,
+      email: generateEmail(username),
+      password: generatePasswordWithSettings(settings),
+      phone: generatePhone(country),
+      address: generateAddress(country),
+      city: generateCity(country),
+      state: generateState(country),
+      zipCode: generateZipCode(country),
+      country: country
+    };
+  }
+
   window.generators = {
-    generateAllInfo,
-    regenerateField,
-    generateFirstName,
-    generateLastName,
-    generateGender,
-    generateBirthday,
-    generateUsername,
-    generateEmail,
-    generatePassword,
-    generatePhone,
-    generateAddress,
-    generateZipCode,
-    generateCity,
-    generateState,
-    selectLocationByCity,
-    normalizeCountry,
-    setCustomEmailDomain,
-    getCustomEmailDomain,
-    getAllEmailDomains
+    generateAllInfo: generateAllInfo,
+    generateAllInfoWithSettings: generateAllInfoWithSettings,
+    regenerateField: regenerateField,
+    generateFirstName: generateFirstName,
+    generateLastName: generateLastName,
+    generateGender: generateGender,
+    generateBirthday: generateBirthday,
+    generateUsername: generateUsername,
+    generateEmail: generateEmail,
+    generatePassword: generatePassword,
+    generatePasswordWithSettings: generatePasswordWithSettings,
+    generatePhone: generatePhone,
+    generateAddress: generateAddress,
+    generateZipCode: generateZipCode,
+    generateCity: generateCity,
+    generateState: generateState,
+    selectLocationByCity: selectLocationByCity,
+    normalizeCountry: normalizeCountry,
+    setCustomEmailDomain: setCustomEmailDomain,
+    getCustomEmailDomain: getCustomEmailDomain,
+    getAllEmailDomains: getAllEmailDomains
   };
 }

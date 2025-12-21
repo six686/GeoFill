@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Popup 主逻辑 - 获取IP信息、生成数据、与content script通信
  */
 
@@ -16,7 +16,25 @@ const elements = {
     emailDomainType: null,
     customDomain: null,
     themeToggle: null,
-    toast: null
+    toast: null,
+    // 新增元素
+    copyAll: null,
+    openSettings: null,
+    closeSettings: null,
+    settingsModal: null,
+    // 设置元素
+    passwordLength: null,
+    pwdUppercase: null,
+    pwdLowercase: null,
+    pwdNumbers: null,
+    pwdSymbols: null,
+    minAge: null,
+    maxAge: null,
+    autoClearData: null,
+    // 存档元素
+    archiveName: null,
+    saveArchive: null,
+    archiveList: null
 };
 
 // 字段列表
@@ -25,17 +43,33 @@ const FIELD_NAMES = ['firstName', 'lastName', 'gender', 'birthday', 'username', 
 // 锁定的字段集合
 let lockedFields = new Set();
 
-// 存储键名和版本（版本变化时清除缓存）
+// 存储键名和版本
 const STORAGE_KEY = 'geoFillCachedData';
 const THEME_KEY = 'geoFillTheme';
 const LOCKED_KEY = 'geoFillLockedFields';
-const CACHE_VERSION = 'v2';  // 更新此版本号可清除旧缓存
+const SETTINGS_KEY = 'geoFillSettings';
+const ARCHIVES_KEY = 'geoFillArchives';
+const AUTO_CLEAR_KEY = 'geoFillAutoClear';
+const CACHE_VERSION = 'v3';
+
+// 默认设置
+let userSettings = {
+    passwordLength: 12,
+    pwdUppercase: true,
+    pwdLowercase: true,
+    pwdNumbers: true,
+    pwdSymbols: true,
+    minAge: 18,
+    maxAge: 55,
+    autoClearData: false
+};
 
 /**
  * 显示 toast 提示
  */
 function showToast(message) {
     const toast = elements.toast;
+    if (!toast) return;
     toast.textContent = message;
     toast.classList.add('show');
     setTimeout(() => {
@@ -82,7 +116,6 @@ async function loadLockedFields() {
         const result = await chrome.storage.local.get(LOCKED_KEY);
         if (result[LOCKED_KEY]) {
             lockedFields = new Set(result[LOCKED_KEY]);
-            // 更新按钮显示
             lockedFields.forEach(field => {
                 const btn = document.querySelector(`.lock-btn[data-field="${field}"]`);
                 if (btn) {
@@ -121,7 +154,7 @@ async function saveDataToStorage() {
     try {
         await chrome.storage.local.set({
             [STORAGE_KEY]: {
-                version: CACHE_VERSION,  // 保存版本号
+                version: CACHE_VERSION,
                 currentData,
                 ipData,
                 emailDomain: elements.emailDomainType?.value,
@@ -140,14 +173,11 @@ async function loadDataFromStorage() {
     try {
         const result = await chrome.storage.local.get(STORAGE_KEY);
         const cached = result[STORAGE_KEY];
-
-        // 检查版本号，版本不匹配则清除缓存
         if (cached && cached.version !== CACHE_VERSION) {
             console.log('缓存版本不匹配，清除旧缓存');
             await chrome.storage.local.remove(STORAGE_KEY);
             return null;
         }
-
         return cached || null;
     } catch (e) {
         console.log('加载数据失败:', e);
@@ -174,10 +204,10 @@ async function loadTheme() {
 function applyTheme(theme) {
     if (theme === 'light') {
         document.body.classList.add('light-theme');
-        elements.themeToggle.textContent = '☀️';
+        if (elements.themeToggle) elements.themeToggle.textContent = '☀️';
     } else {
         document.body.classList.remove('light-theme');
-        elements.themeToggle.textContent = '🌙';
+        if (elements.themeToggle) elements.themeToggle.textContent = '🌙';
     }
 }
 
@@ -195,8 +225,14 @@ async function toggleTheme() {
  * 初始化
  */
 document.addEventListener('DOMContentLoaded', async () => {
-    // 加载生成器模块
-    await loadGeneratorsScript();
+    console.log('[GeoFill] 开始初始化...');
+
+    try {
+        await loadGeneratorsScript();
+        console.log('[GeoFill] 生成器脚本加载成功');
+    } catch (e) {
+        console.error('[GeoFill] 加载生成器脚本失败:', e);
+    }
 
     // 缓存 DOM 元素
     elements.ipInfo = document.getElementById('ipInfo');
@@ -210,69 +246,113 @@ document.addEventListener('DOMContentLoaded', async () => {
         elements.fields[name] = document.getElementById(name);
     });
 
-    // 邮箱后缀相关元素
     elements.emailDomainType = document.getElementById('emailDomainType');
     elements.customDomain = document.getElementById('customDomain');
 
-    // 加载主题
-    await loadTheme();
+    // 新增元素
+    elements.copyAll = document.getElementById('copyAll');
+    elements.openSettings = document.getElementById('openSettings');
+    elements.closeSettings = document.getElementById('closeSettings');
+    elements.settingsModal = document.getElementById('settingsModal');
+    elements.passwordLength = document.getElementById('passwordLength');
+    elements.pwdUppercase = document.getElementById('pwdUppercase');
+    elements.pwdLowercase = document.getElementById('pwdLowercase');
+    elements.pwdNumbers = document.getElementById('pwdNumbers');
+    elements.pwdSymbols = document.getElementById('pwdSymbols');
+    elements.minAge = document.getElementById('minAge');
+    elements.maxAge = document.getElementById('maxAge');
+    elements.autoClearData = document.getElementById('autoClearData');
+    elements.archiveName = document.getElementById('archiveName');
+    elements.saveArchive = document.getElementById('saveArchive');
+    elements.archiveList = document.getElementById('archiveList');
 
-    // 绑定事件
+    try { await loadTheme(); } catch (e) { console.log('loadTheme error:', e); }
+    try { await loadSettings(); } catch (e) { console.log('loadSettings error:', e); }
+
     bindEvents();
 
-    // 加载锁定状态
-    await loadLockedFields();
+    try { await loadLockedFields(); } catch (e) { console.log('loadLockedFields error:', e); }
+    try { await loadArchiveList(); } catch (e) { console.log('loadArchiveList error:', e); }
 
-    // 尝试从缓存加载数据
-    const cachedData = await loadDataFromStorage();
+    let cachedData = null;
+    try {
+        cachedData = await loadDataFromStorage();
+    } catch (e) {
+        console.log('loadDataFromStorage error:', e);
+    }
 
     if (cachedData && cachedData.currentData && Object.keys(cachedData.currentData).length > 0) {
-        // 使用缓存的数据
+        console.log('[GeoFill] 使用缓存数据');
         currentData = cachedData.currentData;
         ipData = cachedData.ipData || {};
 
-        // 恢复邮箱后缀设置
-        if (cachedData.emailDomain) {
+        if (cachedData.emailDomain && elements.emailDomainType) {
             elements.emailDomainType.value = cachedData.emailDomain;
-            if (cachedData.emailDomain === 'custom' && cachedData.customDomain) {
+            if (cachedData.emailDomain === 'custom' && cachedData.customDomain && elements.customDomain) {
                 elements.customDomain.value = cachedData.customDomain;
                 elements.customDomain.style.display = 'block';
             }
         }
 
-        // 设置邮箱后缀
-        window.generators.setCustomEmailDomain(elements.emailDomainType.value);
-
-        // 更新 IP 信息显示（避免城市和国家相同时重复显示）
-        if (ipData.city && ipData.country) {
-            if (ipData.city === ipData.country || ipData.city === 'Singapore' || ipData.city === 'Hong Kong') {
-                elements.ipInfo.innerHTML = `<span class="location">📍 ${ipData.country}</span>`;
-            } else {
-                elements.ipInfo.innerHTML = `<span class="location">📍 ${ipData.city}, ${ipData.country}</span>`;
-            }
-        } else if (ipData.country) {
-            elements.ipInfo.innerHTML = `<span class="location">📍 ${ipData.country}</span>`;
-        } else {
-            elements.ipInfo.innerHTML = `<span class="location">📍 已缓存数据</span>`;
+        if (window.generators) {
+            window.generators.setCustomEmailDomain(elements.emailDomainType?.value || 'gmail.com');
         }
 
-        // 更新界面
+        if (elements.ipInfo) {
+            if (ipData.city && ipData.country) {
+                if (ipData.city === ipData.country || ipData.city === 'Singapore' || ipData.city === 'Hong Kong') {
+                    elements.ipInfo.innerHTML = `<span class="location">📍 ${ipData.country}</span>`;
+                } else {
+                    elements.ipInfo.innerHTML = `<span class="location">📍 ${ipData.city}, ${ipData.country}</span>`;
+                }
+            } else if (ipData.country) {
+                elements.ipInfo.innerHTML = `<span class="location">📍 ${ipData.country}</span>`;
+            } else {
+                elements.ipInfo.innerHTML = `<span class="location">📍 已缓存数据</span>`;
+            }
+        }
+
         updateUI();
     } else {
-        // 没有缓存，获取新数据
-        window.generators.setCustomEmailDomain(elements.emailDomainType.value);
-        await fetchIPInfo();
+        console.log('[GeoFill] 无缓存，获取 IP 信息...');
+        if (window.generators) {
+            window.generators.setCustomEmailDomain(elements.emailDomainType?.value || 'gmail.com');
+        }
+        try {
+            await fetchIPInfo();
+        } catch (e) {
+            console.error('[GeoFill] fetchIPInfo 失败:', e);
+            // 使用默认值
+            if (elements.ipInfo) {
+                elements.ipInfo.innerHTML = `<span class="location">📍 United States (默认)</span>`;
+            }
+            if (window.generators) {
+                ipData = { country: 'United States', city: 'New York', region: '' };
+                currentData = window.generators.generateAllInfoWithSettings(ipData, userSettings);
+                updateUI();
+                saveDataToStorage();
+            }
+        }
     }
+
+    console.log('[GeoFill] 初始化完成');
 });
 
 /**
  * 加载生成器脚本
  */
 function loadGeneratorsScript() {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = '../scripts/generators.js';
-        script.onload = resolve;
+        script.onload = () => {
+            console.log('[GeoFill] generators.js 已加载');
+            resolve();
+        };
+        script.onerror = (e) => {
+            console.error('[GeoFill] generators.js 加载失败:', e);
+            reject(e);
+        };
         document.head.appendChild(script);
     });
 }
@@ -281,43 +361,49 @@ function loadGeneratorsScript() {
  * 绑定事件处理器
  */
 function bindEvents() {
-    // 主题切换
-    elements.themeToggle.addEventListener('click', toggleTheme);
+    if (elements.themeToggle) {
+        elements.themeToggle.addEventListener('click', toggleTheme);
+    }
 
-    // IP 刷新按钮
-    elements.ipRefresh.addEventListener('click', async () => {
-        showToast('正在检测 IP...');
-        await fetchIPInfo();
-        showToast('已更新位置信息');
-    });
-
-    // 全部重新生成（跳过锁定的字段）
-    elements.regenerateAll.addEventListener('click', () => {
-        // 保存锁定字段的值
-        const lockedValues = {};
-        lockedFields.forEach(field => {
-            lockedValues[field] = currentData[field];
-        });
-
-        // 重新生成
-        currentData = window.generators.generateAllInfo(ipData);
-
-        // 恢复锁定字段的值
-        lockedFields.forEach(field => {
-            if (lockedValues[field] !== undefined) {
-                currentData[field] = lockedValues[field];
+    if (elements.ipRefresh) {
+        elements.ipRefresh.addEventListener('click', async () => {
+            showToast('正在检测 IP...');
+            try {
+                await fetchIPInfo();
+                showToast('已更新位置信息');
+            } catch (e) {
+                showToast('IP 检测失败');
             }
         });
+    }
 
-        updateUI();
-        saveDataToStorage();
-        showToast('已重新生成（锁定字段已保留）');
-    });
+    if (elements.regenerateAll) {
+        elements.regenerateAll.addEventListener('click', () => {
+            if (!window.generators) return;
 
-    // 填写表单
-    elements.fillForm.addEventListener('click', fillFormInPage);
+            const lockedValues = {};
+            lockedFields.forEach(field => {
+                lockedValues[field] = currentData[field];
+            });
 
-    // 锁定按钮
+            currentData = window.generators.generateAllInfoWithSettings(ipData, userSettings);
+
+            lockedFields.forEach(field => {
+                if (lockedValues[field] !== undefined) {
+                    currentData[field] = lockedValues[field];
+                }
+            });
+
+            updateUI();
+            saveDataToStorage();
+            // 重新生成完成
+        });
+    }
+
+    if (elements.fillForm) {
+        elements.fillForm.addEventListener('click', fillFormInPage);
+    }
+
     document.querySelectorAll('.lock-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const fieldName = e.currentTarget.dataset.field;
@@ -325,7 +411,6 @@ function bindEvents() {
         });
     });
 
-    // 复制按钮
     document.querySelectorAll('.copy-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const fieldName = e.currentTarget.dataset.field;
@@ -336,29 +421,23 @@ function bindEvents() {
         });
     });
 
-    // 单个字段重新生成
     document.querySelectorAll('.refresh-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
+            if (!window.generators) return;
+
             const fieldName = e.currentTarget.dataset.field;
-            // 先从输入框更新 currentData
             updateCurrentDataFromInputs();
-            // 重新生成该字段
             const result = window.generators.regenerateField(fieldName, currentData, ipData);
 
-            // 检查是否是位置更新（城市/州刷新会返回关联对象）
             if (result && result._isLocationUpdate) {
-                // 更新城市、州、邮编
                 currentData.city = result.city;
                 currentData.state = result.state;
                 currentData.zipCode = result.zipCode;
-
-                // 更新所有相关字段的显示
                 if (elements.fields.city) elements.fields.city.value = result.city;
                 if (elements.fields.state) elements.fields.state.value = result.state;
                 if (elements.fields.zipCode) elements.fields.zipCode.value = result.zipCode;
             } else {
                 currentData[fieldName] = result;
-                // 更新显示
                 if (elements.fields[fieldName]) {
                     elements.fields[fieldName].value = currentData[fieldName];
                 }
@@ -367,14 +446,12 @@ function bindEvents() {
         });
     });
 
-    // 监听输入框变化，同步到 currentData
     FIELD_NAMES.forEach(name => {
         if (elements.fields[name]) {
             elements.fields[name].addEventListener('input', () => {
                 currentData[name] = elements.fields[name].value;
                 saveDataToStorage();
             });
-            // select 元素使用 change 事件
             elements.fields[name].addEventListener('change', () => {
                 currentData[name] = elements.fields[name].value;
                 saveDataToStorage();
@@ -382,62 +459,66 @@ function bindEvents() {
         }
     });
 
-    // 监听国家选择变化，重新生成相关信息
-    elements.fields.country.addEventListener('change', () => {
-        const newCountry = elements.fields.country.value;
+    if (elements.fields.country) {
+        elements.fields.country.addEventListener('change', () => {
+            if (!window.generators) return;
 
-        // 更新 ipData，清除城市和州信息（因为是手动选择国家，应根据新国家随机生成）
-        ipData.country = newCountry;
-        ipData.city = '';     // 清除城市
-        ipData.region = '';   // 清除州/地区
+            const newCountry = elements.fields.country.value;
+            ipData.country = newCountry;
+            ipData.city = '';
+            ipData.region = '';
+            currentData = window.generators.generateAllInfoWithSettings(ipData, userSettings);
+            updateUI();
+            saveDataToStorage();
+            showToast(`已切换到 ${newCountry}`);
+        });
+    }
 
-        // 使用 generateAllInfo 重新生成所有信息，确保地址关联正确
-        currentData = window.generators.generateAllInfo(ipData);
+    if (elements.emailDomainType) {
+        elements.emailDomainType.addEventListener('change', () => {
+            const domain = elements.emailDomainType.value;
+            if (domain === 'custom') {
+                if (elements.customDomain) elements.customDomain.style.display = 'block';
+                if (elements.customDomain?.value?.trim() && window.generators) {
+                    window.generators.setCustomEmailDomain(elements.customDomain.value.trim());
+                    regenerateEmail();
+                }
+            } else {
+                if (elements.customDomain) elements.customDomain.style.display = 'none';
+                if (window.generators) {
+                    window.generators.setCustomEmailDomain(domain);
+                    regenerateEmail();
+                }
+            }
+            saveDataToStorage();
+        });
+    }
 
-        updateUI();
-        saveDataToStorage();
-        showToast(`已切换到 ${newCountry}`);
-    });
-
-    // 监听邮箱后缀选择变化
-    elements.emailDomainType.addEventListener('change', () => {
-        const domain = elements.emailDomainType.value;
-
-        // 显示/隐藏自定义输入框
-        if (domain === 'custom') {
-            elements.customDomain.style.display = 'block';
-            // 如果有自定义后缀，使用它
-            if (elements.customDomain.value.trim()) {
-                window.generators.setCustomEmailDomain(elements.customDomain.value.trim());
+    if (elements.customDomain) {
+        elements.customDomain.addEventListener('input', () => {
+            const domain = elements.customDomain.value.trim();
+            if (domain && window.generators) {
+                window.generators.setCustomEmailDomain(domain);
                 regenerateEmail();
             }
-        } else {
-            elements.customDomain.style.display = 'none';
-            // 直接使用选择的域名作为后缀
-            window.generators.setCustomEmailDomain(domain);
-            regenerateEmail();
-        }
-        saveDataToStorage();
-    });
+            saveDataToStorage();
+        });
+    }
 
-    // 监听自定义后缀输入
-    elements.customDomain.addEventListener('input', () => {
-        const domain = elements.customDomain.value.trim();
-        if (domain) {
-            window.generators.setCustomEmailDomain(domain);
-            regenerateEmail();
-        }
-        saveDataToStorage();
-    });
+    // 绑定新功能事件
+    bindSettingsEvents();
 }
 
 /**
- * 重新生成邮箱（使用当前选择的后缀）
+ * 重新生成邮箱
  */
 function regenerateEmail() {
+    if (!window.generators) return;
     updateCurrentDataFromInputs();
     currentData.email = window.generators.generateEmail(currentData.username);
-    elements.fields.email.value = currentData.email;
+    if (elements.fields.email) {
+        elements.fields.email.value = currentData.email;
+    }
 }
 
 /**
@@ -455,76 +536,84 @@ function updateCurrentDataFromInputs() {
  * 获取 IP 信息
  */
 async function fetchIPInfo() {
-    elements.ipInfo.innerHTML = '<span class="loading">获取位置中...</span>';
+    console.log('[GeoFill] 开始获取 IP 信息...');
+
+    if (elements.ipInfo) {
+        elements.ipInfo.innerHTML = '<span class="loading">获取位置中...</span>';
+    }
 
     let country = 'United States';
     let city = 'New York';
-    let region = '';  // 州/省/地区
+    let region = '';
     let success = false;
 
-    // 尝试 ipapi.co (HTTPS)
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-
         const response = await fetch('https://ipapi.co/json/', { signal: controller.signal });
         clearTimeout(timeoutId);
-
         const result = await response.json();
+        console.log('[GeoFill] ipapi.co 响应:', result);
         if (result.country_name) {
             country = result.country_name;
             city = result.city || 'Unknown';
-            region = result.region || '';  // 获取州/地区
+            region = result.region || '';
             success = true;
         }
     } catch (e) {
-        console.log('ipapi.co failed:', e.message);
+        console.log('[GeoFill] ipapi.co failed:', e.message);
     }
 
-    // 备用: ip-api.com
     if (!success) {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
-
             const response = await fetch('http://ip-api.com/json/', { signal: controller.signal });
             clearTimeout(timeoutId);
-
             const result = await response.json();
+            console.log('[GeoFill] ip-api.com 响应:', result);
             if (result.status === 'success') {
                 country = result.country;
                 city = result.city || 'Unknown';
-                region = result.regionName || '';  // 获取州/地区
+                region = result.regionName || '';
                 success = true;
             }
         } catch (e) {
-            console.log('ip-api.com failed:', e.message);
+            console.log('[GeoFill] ip-api.com failed:', e.message);
         }
     }
 
-    // 标准化国家名称
+    if (!window.generators) {
+        console.error('[GeoFill] generators 未加载');
+        if (elements.ipInfo) {
+            elements.ipInfo.innerHTML = `<span class="location">📍 ${country} (默认)</span>`;
+        }
+        return;
+    }
+
     const normalizedCountry = window.generators.normalizeCountry(country);
+    console.log('[GeoFill] 标准化国家:', normalizedCountry);
 
     ipData = {
         country: normalizedCountry,
         city: city,
-        region: region  // 保存州/地区信息
+        region: region
     };
 
-    // 更新位置显示（避免城市和国家相同时重复显示）
-    if (success) {
-        if (city === normalizedCountry || city === 'Singapore' || city === 'Hong Kong') {
-            // 城市国家（如新加坡、香港）只显示一次
-            elements.ipInfo.innerHTML = `<span class="location">📍 ${normalizedCountry}</span>`;
+    if (elements.ipInfo) {
+        if (success) {
+            if (city === normalizedCountry || city === 'Singapore' || city === 'Hong Kong') {
+                elements.ipInfo.innerHTML = `<span class="location">📍 ${normalizedCountry}</span>`;
+            } else {
+                elements.ipInfo.innerHTML = `<span class="location">📍 ${city}, ${normalizedCountry}</span>`;
+            }
         } else {
-            elements.ipInfo.innerHTML = `<span class="location">📍 ${city}, ${normalizedCountry}</span>`;
+            elements.ipInfo.innerHTML = `<span class="location">📍 ${normalizedCountry} (默认)</span>`;
         }
-    } else {
-        elements.ipInfo.innerHTML = `<span class="location">📍 ${normalizedCountry} (默认)</span>`;
     }
 
-    // 生成信息
-    currentData = window.generators.generateAllInfo(ipData);
+    currentData = window.generators.generateAllInfoWithSettings(ipData, userSettings);
+    console.log('[GeoFill] 生成数据:', currentData);
     updateUI();
     saveDataToStorage();
 }
@@ -536,13 +625,11 @@ function updateUI() {
     FIELD_NAMES.forEach(name => {
         if (elements.fields[name] && currentData[name] !== undefined) {
             if (name === 'country' || name === 'gender') {
-                // select 元素
                 const selectEl = elements.fields[name];
                 const options = Array.from(selectEl.options).map(opt => opt.value);
                 if (options.includes(currentData[name])) {
                     selectEl.value = currentData[name];
                 } else if (name === 'country') {
-                    // 如果检测到的国家不在列表中，使用第一个选项（美国）
                     selectEl.selectedIndex = 0;
                     currentData[name] = selectEl.value;
                     ipData.country = selectEl.value;
@@ -558,23 +645,278 @@ function updateUI() {
  * 在页面中填写表单
  */
 async function fillFormInPage() {
-    // 更新 currentData 以获取用户可能的修改
     updateCurrentDataFromInputs();
 
     try {
-        // 获取当前标签页
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-        // 发送消息给 content script
         await chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
             data: currentData
         });
-
-        // 关闭弹窗
         window.close();
     } catch (error) {
         console.error('填写表单失败:', error);
         alert('填写失败，请确保页面已完全加载');
     }
 }
+
+// ===== 新功能函数 =====
+
+/**
+ * 一键复制全部信息
+ */
+async function copyAllToClipboard() {
+    updateCurrentDataFromInputs();
+
+    const lines = [
+        `姓名: ${currentData.firstName} ${currentData.lastName}`,
+        `性别: ${currentData.gender === 'male' ? '男' : '女'}`,
+        `生日: ${currentData.birthday}`,
+        `用户名: ${currentData.username}`,
+        `邮箱: ${currentData.email}`,
+        `密码: ${currentData.password}`,
+        `电话: ${currentData.phone}`,
+        `地址: ${currentData.address}`,
+        `城市: ${currentData.city}`,
+        `州/省: ${currentData.state}`,
+        `邮编: ${currentData.zipCode}`,
+        `国家: ${currentData.country}`
+    ];
+
+    const text = lines.join('\n');
+
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('已复制全部信息');
+    } catch (err) {
+        console.error('复制失败:', err);
+        showToast('复制失败');
+    }
+}
+
+/**
+ * 打开设置模态框
+ */
+function openSettingsModal() {
+    if (elements.settingsModal) {
+        elements.settingsModal.classList.add('show');
+        updateSettingsUI();
+        loadArchiveList();
+    }
+}
+
+/**
+ * 关闭设置模态框
+ */
+function closeSettingsModal() {
+    if (elements.settingsModal) {
+        elements.settingsModal.classList.remove('show');
+    }
+}
+
+/**
+ * 更新设置 UI
+ */
+function updateSettingsUI() {
+    if (elements.passwordLength) elements.passwordLength.value = userSettings.passwordLength;
+    if (elements.pwdUppercase) elements.pwdUppercase.checked = userSettings.pwdUppercase;
+    if (elements.pwdLowercase) elements.pwdLowercase.checked = userSettings.pwdLowercase;
+    if (elements.pwdNumbers) elements.pwdNumbers.checked = userSettings.pwdNumbers;
+    if (elements.pwdSymbols) elements.pwdSymbols.checked = userSettings.pwdSymbols;
+    if (elements.minAge) elements.minAge.value = userSettings.minAge;
+    if (elements.maxAge) elements.maxAge.value = userSettings.maxAge;
+    if (elements.autoClearData) elements.autoClearData.checked = userSettings.autoClearData;
+}
+
+/**
+ * 保存设置
+ */
+async function saveSettings() {
+    userSettings = {
+        passwordLength: parseInt(elements.passwordLength?.value) || 12,
+        pwdUppercase: elements.pwdUppercase?.checked ?? true,
+        pwdLowercase: elements.pwdLowercase?.checked ?? true,
+        pwdNumbers: elements.pwdNumbers?.checked ?? true,
+        pwdSymbols: elements.pwdSymbols?.checked ?? true,
+        minAge: parseInt(elements.minAge?.value) || 18,
+        maxAge: parseInt(elements.maxAge?.value) || 55,
+        autoClearData: elements.autoClearData?.checked ?? false
+    };
+
+    try {
+        await chrome.storage.local.set({ [SETTINGS_KEY]: userSettings });
+        await chrome.storage.local.set({ [AUTO_CLEAR_KEY]: userSettings.autoClearData });
+        if (window.generators && window.generators.updateSettings) {
+            window.generators.updateSettings(userSettings);
+        }
+    } catch (e) {
+        console.log('保存设置失败:', e);
+    }
+}
+
+/**
+ * 加载设置
+ */
+async function loadSettings() {
+    try {
+        const result = await chrome.storage.local.get(SETTINGS_KEY);
+        if (result[SETTINGS_KEY]) {
+            userSettings = { ...userSettings, ...result[SETTINGS_KEY] };
+        }
+        updateSettingsUI();
+        if (window.generators && window.generators.updateSettings) {
+            window.generators.updateSettings(userSettings);
+        }
+    } catch (e) {
+        console.log('加载设置失败:', e);
+    }
+}
+
+/**
+ * 保存存档
+ */
+async function saveArchive() {
+    const name = elements.archiveName?.value?.trim();
+    if (!name) {
+        showToast('请输入存档名称');
+        return;
+    }
+
+    updateCurrentDataFromInputs();
+
+    try {
+        const result = await chrome.storage.local.get(ARCHIVES_KEY);
+        const archives = result[ARCHIVES_KEY] || [];
+
+        const existingIndex = archives.findIndex(a => a.name === name);
+        const archiveData = {
+            name,
+            data: { ...currentData },
+            timestamp: Date.now()
+        };
+
+        if (existingIndex >= 0) {
+            archives[existingIndex] = archiveData;
+            showToast(`存档 "${name}" 已更新`);
+        } else {
+            archives.push(archiveData);
+            showToast(`存档 "${name}" 已保存`);
+        }
+
+        await chrome.storage.local.set({ [ARCHIVES_KEY]: archives });
+        if (elements.archiveName) elements.archiveName.value = '';
+        await loadArchiveList();
+    } catch (e) {
+        console.log('保存存档失败:', e);
+        showToast('保存失败');
+    }
+}
+
+/**
+ * 加载存档列表
+ */
+async function loadArchiveList() {
+    if (!elements.archiveList) return;
+
+    try {
+        const result = await chrome.storage.local.get(ARCHIVES_KEY);
+        const archives = result[ARCHIVES_KEY] || [];
+
+        if (archives.length === 0) {
+            elements.archiveList.innerHTML = '<div class="archive-empty">暂无存档</div>';
+            return;
+        }
+
+        elements.archiveList.innerHTML = archives.map((archive, index) => `
+            <div class="archive-item" data-index="${index}">
+                <span class="archive-item-name">${archive.name}</span>
+                <div class="archive-item-actions">
+                    <button class="load-btn" title="加载" onclick="loadArchive(${index})">📂</button>
+                    <button class="delete-btn" title="删除" onclick="deleteArchive(${index})">🗑️</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.log('加载存档列表失败:', e);
+    }
+}
+
+/**
+ * 加载存档
+ */
+async function loadArchive(index) {
+    try {
+        const result = await chrome.storage.local.get(ARCHIVES_KEY);
+        const archives = result[ARCHIVES_KEY] || [];
+
+        if (archives[index]) {
+            currentData = { ...archives[index].data };
+            updateUI();
+            saveDataToStorage();
+            closeSettingsModal();
+            showToast(`已加载存档 "${archives[index].name}"`);
+        }
+    } catch (e) {
+        console.log('加载存档失败:', e);
+    }
+}
+
+/**
+ * 删除存档
+ */
+async function deleteArchive(index) {
+    try {
+        const result = await chrome.storage.local.get(ARCHIVES_KEY);
+        const archives = result[ARCHIVES_KEY] || [];
+
+        if (archives[index]) {
+            const name = archives[index].name;
+            archives.splice(index, 1);
+            await chrome.storage.local.set({ [ARCHIVES_KEY]: archives });
+            await loadArchiveList();
+            showToast(`存档 "${name}" 已删除`);
+        }
+    } catch (e) {
+        console.log('删除存档失败:', e);
+    }
+}
+
+/**
+ * 绑定设置相关事件
+ */
+function bindSettingsEvents() {
+    if (elements.openSettings) {
+        elements.openSettings.addEventListener('click', openSettingsModal);
+    }
+    if (elements.closeSettings) {
+        elements.closeSettings.addEventListener('click', closeSettingsModal);
+    }
+
+    if (elements.settingsModal) {
+        elements.settingsModal.addEventListener('click', (e) => {
+            if (e.target === elements.settingsModal) {
+                closeSettingsModal();
+            }
+        });
+    }
+
+    if (elements.copyAll) {
+        elements.copyAll.addEventListener('click', copyAllToClipboard);
+    }
+
+    if (elements.saveArchive) {
+        elements.saveArchive.addEventListener('click', saveArchive);
+    }
+
+    const settingInputs = ['passwordLength', 'pwdUppercase', 'pwdLowercase', 'pwdNumbers', 'pwdSymbols', 'minAge', 'maxAge', 'autoClearData'];
+    settingInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', saveSettings);
+        }
+    });
+}
+
+// 暴露函数给全局
+window.loadArchive = loadArchive;
+window.deleteArchive = deleteArchive;
