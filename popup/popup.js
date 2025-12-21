@@ -467,7 +467,20 @@ function bindEvents() {
             ipData.country = newCountry;
             ipData.city = '';
             ipData.region = '';
+            // 保存锁定字段的值
+            const lockedValues = {};
+            lockedFields.forEach(field => {
+                lockedValues[field] = currentData[field];
+            });
+
             currentData = window.generators.generateAllInfoWithSettings(ipData, userSettings);
+
+            // 恢复锁定字段的值
+            lockedFields.forEach(field => {
+                if (lockedValues[field] !== undefined) {
+                    currentData[field] = lockedValues[field];
+                }
+            });
             updateUI();
             saveDataToStorage();
             showToast(`已切换到 ${newCountry}`);
