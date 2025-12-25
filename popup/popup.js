@@ -641,6 +641,13 @@ function bindEvents() {
                     );
                     if (realAddress && realAddress.address) {
                         currentData.address = realAddress.address;
+                        // 同时更新州省和邮编（如果有值且未锁定）
+                        if (realAddress.state && !lockedFields.has('state')) {
+                            currentData.state = realAddress.state;
+                        }
+                        if (realAddress.zipCode && !lockedFields.has('zipCode')) {
+                            currentData.zipCode = realAddress.zipCode;
+                        }
                         const sourceText = realAddress.source === 'geoapify' ? 'Geoapify' :
                             realAddress.source === 'openstreetmap' ? 'OSM' : '本地';
                         showToast(`已获取真实地址 (${sourceText})`);
