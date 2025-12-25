@@ -990,6 +990,33 @@ async function fetchIPInfo() {
 
     currentData = window.generators.generateAllInfoWithSettings(ipData, userSettings);
     console.log('[GeoFill] 生成数据:', currentData);
+
+    // 尝试获取真实地址（智能切换：Geoapify → OSM → 本地）
+    const addressApiEnabled = document.getElementById('useAddressApiToggle')?.checked !== false;
+    if (addressApiEnabled && window.generators.generateAddressAsync) {
+        try {
+            showToast('正在获取真实地址...');
+            const realAddress = await window.generators.generateAddressAsync(
+                currentData.country,
+                currentData.city
+            );
+            if (realAddress && realAddress.address) {
+                currentData.address = realAddress.address;
+                if (realAddress.state) {
+                    currentData.state = realAddress.state;
+                }
+                if (realAddress.zipCode) {
+                    currentData.zipCode = realAddress.zipCode;
+                }
+                const sourceText = realAddress.source === 'geoapify' ? 'Geoapify' :
+                    realAddress.source === 'openstreetmap' ? 'OSM' : '本地';
+                showToast(`已获取真实地址 (${sourceText})`);
+            }
+        } catch (e) {
+            console.log('[GeoFill] 地址 API 调用失败:', e);
+        }
+    }
+
     updateUI();
     saveDataToStorage();
 }
