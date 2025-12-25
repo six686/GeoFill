@@ -631,8 +631,8 @@ function bindEvents() {
 
             currentData = window.generators.generateAllInfoWithSettings(ipData, userSettings);
 
-            // 如果配置了 Geoapify API Key，尝试获取真实地址
-            if (geoapifyApiKey && window.generators.generateAddressAsync && !lockedFields.has('address')) {
+            // 尝试获取真实地址（智能切换：Geoapify → OSM → 本地）
+            if (window.generators.generateAddressAsync && !lockedFields.has('address')) {
                 try {
                     showToast('正在获取真实地址...');
                     const realAddress = await window.generators.generateAddressAsync(
@@ -641,11 +641,12 @@ function bindEvents() {
                     );
                     if (realAddress && realAddress.address) {
                         currentData.address = realAddress.address;
-                        // 注意：不更新城市/州/邮编，保持与本地生成的数据一致
-                        showToast('已获取真实地址');
+                        const sourceText = realAddress.source === 'geoapify' ? 'Geoapify' :
+                            realAddress.source === 'openstreetmap' ? 'OSM' : '本地';
+                        showToast(`已获取真实地址 (${sourceText})`);
                     }
                 } catch (e) {
-                    console.log('[GeoFill] Geoapify API 调用失败:', e);
+                    console.log('[GeoFill] 地址 API 调用失败:', e);
                 }
             }
 

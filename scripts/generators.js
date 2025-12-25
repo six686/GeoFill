@@ -127,11 +127,89 @@ async function fetchRealAddressFromApi(lat, lon) {
         city: props.city || props.town || props.municipality,
         state: props.state || props.county,
         zipCode: props.postcode,
-        country: props.country
+        country: props.country,
+        source: 'geoapify'
       };
     }
   } catch (e) {
     console.log('[GeoFill] Geoapify API 调用失败:', e);
+  }
+
+  return null;
+}
+
+/**
+ * 调用 OpenStreetMap Nominatim API 获取真实地址（免费，无需 Key）
+ */
+async function fetchAddressFromOSM(lat, lon) {
+  // 在城市中心附近小范围偏移 (约 300-500m)
+  const offsetLat = lat + (Math.random() - 0.5) * 0.005;
+  const offsetLon = lon + (Math.random() - 0.5) * 0.005;
+
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${offsetLat}&lon=${offsetLon}&addressdetails=1&accept-language=en`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'GeoFill-Extension/1.7.1'
+      }
+    });
+
+    if (!response.ok) {
+      console.log('[GeoFill] OSM Nominatim API 请求失败:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (data && data.address) {
+      const addr = data.address;
+      // 构建街道地址
+      let streetAddress = '';
+      if (addr.house_number && addr.road) {
+        streetAddress = `${addr.house_number} ${addr.road}`;
+      } else if (addr.road) {
+        streetAddress = `${Math.floor(Math.random() * 999) + 1} ${addr.road}`;
+      } else if (addr.neighbourhood) {
+        streetAddress = addr.neighbourhood;
+      } else if (addr.suburb) {
+        streetAddress = addr.suburb;
+      }
+
+      return {
+        address: streetAddress || data.display_name?.split(',')[0] || '',
+        city: addr.city || addr.town || addr.village || addr.municipality || addr.county || '',
+        state: addr.state || addr.province || addr.region || '',
+        zipCode: addr.postcode || '',
+        country: addr.country || '',
+        source: 'openstreetmap'
+      };
+    }
+  } catch (e) {
+    console.log('[GeoFill] OSM Nominatim API 调用失败:', e);
+  }
+
+  return null;
+}
+
+/**
+ * 智能获取真实地址：优先 Geoapify，备用 OSM
+ */
+async function fetchRealAddressSmart(lat, lon) {
+  // 优先使用 Geoapify（如果有 API Key）
+  if (geoapifyApiKey) {
+    const result = await fetchRealAddressFromApi(lat, lon);
+    if (result) {
+      console.log('[GeoFill] 使用 Geoapify 地址');
+      return result;
+    }
+  }
+
+  // 降级到 OpenStreetMap
+  const osmResult = await fetchAddressFromOSM(lat, lon);
+  if (osmResult) {
+    console.log('[GeoFill] 使用 OpenStreetMap 地址');
+    return osmResult;
   }
 
   return null;
@@ -1228,26 +1306,29 @@ if (typeof window !== 'undefined') {
     setCustomEmailDomain: setCustomEmailDomain,
     getCustomEmailDomain: getCustomEmailDomain,
     getAllEmailDomains: getAllEmailDomains,
-    // Geoapify 相关
+    // 地址 API 相关
     setGeoapifyApiKey: setGeoapifyApiKey,
     fetchRealAddressFromApi: fetchRealAddressFromApi,
+    fetchAddressFromOSM: fetchAddressFromOSM,
+    fetchRealAddressSmart: fetchRealAddressSmart,
     CITY_COORDINATES: CITY_COORDINATES,
     /**
-     * 异步生成地址（优先使用 Geoapify API）
+     * 异步生成地址（智能切换：Geoapify → OSM → 本地生成）
      */
     generateAddressAsync: async function (country, cityName) {
       // 尝试获取城市坐标
       const coords = CITY_COORDINATES[cityName] || CITY_COORDINATES[currentLocation?.city];
 
-      if (geoapifyApiKey && coords) {
+      if (coords) {
         try {
-          const realAddr = await fetchRealAddressFromApi(coords.lat, coords.lon);
+          // 使用智能切换函数（优先 Geoapify，备用 OSM）
+          const realAddr = await fetchRealAddressSmart(coords.lat, coords.lon);
           if (realAddr && realAddr.address) {
-            console.log('[GeoFill] 使用 Geoapify 真实地址:', realAddr.address);
+            console.log('[GeoFill] 获取真实地址成功:', realAddr.address, '来源:', realAddr.source);
             return realAddr;
           }
         } catch (e) {
-          console.log('[GeoFill] Geoapify API 失败，使用默认生成');
+          console.log('[GeoFill] 地址 API 失败，使用本地生成');
         }
       }
 
@@ -1257,7 +1338,8 @@ if (typeof window !== 'undefined') {
         city: generateCity(country),
         state: generateState(country),
         zipCode: generateZipCode(country),
-        country: country
+        country: country,
+        source: 'local'
       };
     }
   };

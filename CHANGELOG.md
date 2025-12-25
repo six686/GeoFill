@@ -1,5 +1,12 @@
 # 更新日志
 
+## [1.7.2] - 2025-12-25
+
+### 新增
+- OpenStreetMap Nominatim 地址 API 支持（免费，无需 Key）
+- 智能地址切换：优先 Geoapify → 备用 OSM → 本地生成
+- Toast 提示显示地址来源（Geoapify / OSM / 本地）
+
 ## [1.7.1] - 2025-12-25
 
 ### 新增
