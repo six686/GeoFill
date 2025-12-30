@@ -114,19 +114,38 @@ GeoFill 是一个浏览器扩展工具，可根据地理位置生成符合本地
 
 
 ```
-├── manifest.json       # 插件清单
+├── manifest.json        # 插件清单
 ├── popup/
-│   ├── popup.html     # 弹出面板
-│   ├── popup.css      # 样式
-│   └── popup.js       # 面板逻辑
+│   ├── popup.html       # 弹出面板
+│   ├── popup.css        # 样式
+│   ├── popup.js         # 主入口
+│   └── js/              # 功能模块
+│       ├── constants.js # 常量和全局状态
+│       ├── utils.js     # 工具函数
+│       ├── storage.js   # 存储管理
+│       ├── ui.js        # 界面渲染
+│       ├── api.js       # API 通信
+│       ├── mail.js      # 临时邮箱
+│       ├── history.js   # 历史记录
+│       ├── archive.js   # 存档管理
+│       ├── form-fill.js # 表单填充
+│       ├── events.js    # 事件处理
+│       └── ai.js        # AI 功能
 ├── scripts/
-│   ├── generators.js  # 信息生成器
-│   └── content.js     # 表单填写（增强版）
-└── icons/             # 插件图标
+│   ├── generators.js    # 信息生成器
+│   └── content.js       # 表单填写
+└── icons/               # 插件图标
 ```
 
 ## 🔄 更新日志
 
+### v1.8.0 (2025-12-30)
+- 🔨 代码模块化重构：将 popup.js 拆分为独立功能模块
+- ✨ 新增 DEBUG 调试开关（生产环境可关闭日志）
+- ✨ 新增统一日志系统和错误处理
+- ✨ 新增按钮加载动画
+- 🐛 增强字段锁定功能：锁定字段在任何操作下都不会被修改
+- 🔧 合并 theme.js 到 ui.js，清理重复代码
 
 ### v1.7.3 (2025-12-25)
 - ✨ 新增主界面地址 API 开关 🗺️（快速切换是否使用 API 获取真实地址）
